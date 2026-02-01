@@ -1,0 +1,14 @@
+---
+export const prerender = false;
+
+// Call logout API
+await fetch(new URL("/api/auth/logout", Astro.url.origin), {
+  method: "POST",
+  headers: {
+    Cookie: Astro.request.headers.get("Cookie") || "",
+  },
+});
+
+// Always redirect to login, regardless of API result
+return Astro.redirect("/auth/login");
+---

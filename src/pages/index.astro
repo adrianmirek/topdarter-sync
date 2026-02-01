@@ -1,0 +1,18 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import { GuestPage } from "@/components/guest/GuestPage";
+
+// Check if user is authenticated - redirect to tournaments if logged in
+const user = Astro.locals.user;
+
+export const prerender = false;
+
+// Redirect authenticated users to tournaments page
+if (user) {
+  return Astro.redirect("/tournaments");
+}
+---
+
+<Layout title="Darter Assistant - Find Your Matches" showAuthNav={false}>
+  <GuestPage client:only="react" />
+</Layout>

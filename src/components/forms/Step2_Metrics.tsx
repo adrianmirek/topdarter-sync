@@ -1,0 +1,438 @@
+import { useFormContext } from "react-hook-form";
+import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/lib/hooks/I18nProvider";
+import type { AddTournamentFormViewModel } from "./AddTournamentForm";
+import type { MatchTypeDTO } from "@/types";
+
+interface Step2_MetricsProps {
+  matchTypes: MatchTypeDTO[];
+  isLoadingMatchTypes: boolean;
+  matchTypesError: string | null;
+  onSaveMatch: () => void;
+}
+
+export default function Step2_Metrics({
+  matchTypes,
+  isLoadingMatchTypes,
+  matchTypesError,
+  onSaveMatch,
+}: Step2_MetricsProps) {
+  const form = useFormContext<AddTournamentFormViewModel>();
+  const t = useTranslation();
+
+  return (
+    <div className="space-y-6">
+      {/* Match Type, Opponent Name, and Result - Horizontal Layout */}
+      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3 items-start">
+        {/* Match Type Field */}
+        <FormField
+          control={form.control}
+          name="current_match.match_type_id"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>{t("tournaments.matchType")}</FormLabel>
+              {matchTypesError ? (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{matchTypesError}</div>
+              ) : (
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    form.clearErrors("current_match.match_type_id");
+                  }}
+                  value={field.value}
+                  disabled={isLoadingMatchTypes}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full notranslate" data-testid="match-type-select" translate="no">
+                      <SelectValue
+                        placeholder={isLoadingMatchTypes ? t("common.loading") : t("tournaments.selectMatchType")}
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="notranslate" translate="no">
+                    {matchTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.id.toString()}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Opponent Name Field */}
+        <FormField
+          control={form.control}
+          name="current_match.opponent_name"
+          render={({ field }) => (
+            <FormItem className="flex flex-col">
+              <FormLabel>{t("tournaments.opponent")}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={t("tournaments.opponentPlaceholder")}
+                  maxLength={255}
+                  {...field}
+                  data-testid="opponent-name-input"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Result Field (Player Score : Opponent Score) */}
+        <div className="flex flex-col space-y-2">
+          <FormLabel>{t("tournaments.result")}</FormLabel>
+          <div className="flex items-start gap-2">
+            <FormField
+              control={form.control}
+              name="current_match.player_score"
+              render={({ field, fieldState }) => (
+                <FormItem className="flex-1 space-y-1">
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="0"
+                      {...field}
+                      value={field.value || ""}
+                      onChange={(e) => {
+                        const newValue = parseInt(e.target.value, 10) || 0;
+                        field.onChange(newValue);
+                        // Clear error when result is no longer 0:0
+                        if (newValue > 0 || form.getValues("current_match.opponent_score") > 0) {
+                          form.clearErrors("current_match.player_score");
+                        }
+                      }}
+                      data-testid="player-score-input"
+                      className={fieldState.error ? "border-destructive" : ""}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <span className="text-lg font-semibold pt-2">:</span>
+            <FormField
+              control={form.control}
+              name="current_match.opponent_score"
+              render={({ field }) => {
+                const playerScoreError = form.formState.errors.current_match?.player_score;
+                return (
+                  <FormItem className="flex-1 space-y-1">
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => {
+                          const newValue = parseInt(e.target.value, 10) || 0;
+                          field.onChange(newValue);
+                          // Clear error when result is no longer 0:0
+                          if (form.getValues("current_match.player_score") > 0 || newValue > 0) {
+                            form.clearErrors("current_match.player_score");
+                          }
+                        }}
+                        data-testid="opponent-score-input"
+                        className={playerScoreError ? "border-destructive" : ""}
+                      />
+                    </FormControl>
+                  </FormItem>
+                );
+              }}
+            />
+          </div>
+          <FormField
+            control={form.control}
+            name="current_match.player_score"
+            render={() => (
+              <FormItem className="space-y-0">
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">{t("tournaments.performanceMetrics")}</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="current_match.average_score"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.averageScore")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    max="180"
+                    step="1.00"
+                    placeholder=""
+                    {...field}
+                    value={field.value === 0 ? "" : field.value}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                      field.onChange(value);
+                      if (value > 0) {
+                        form.clearErrors("current_match.average_score");
+                      }
+                    }}
+                    data-testid="average-score-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.first_nine_avg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.firstNineDartAverage")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    max="180"
+                    step="1.00"
+                    placeholder=""
+                    {...field}
+                    value={field.value === 0 ? "" : field.value}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                      field.onChange(value);
+                      if (value > 0) {
+                        form.clearErrors("current_match.first_nine_avg");
+                      }
+                    }}
+                    data-testid="first-nine-avg-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.checkout_percentage"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.checkoutPercentage")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1.00"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                    data-testid="checkout-percentage-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.high_finish"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.highFinish")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="170"
+                    step="1"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    data-testid="high-finish-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">{t("tournaments.scoreCounts")}</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <FormField
+            control={form.control}
+            name="current_match.score_60_count"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.sixtyPlusScores")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    data-testid="score-60-count-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.score_100_count"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.oneHundredPlus")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    data-testid="score-100-count-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.score_140_count"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.oneHundredFortyPlus")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    data-testid="score-140-count-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.score_180_count"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.oneHundredEightyScores")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    {...field}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    data-testid="score-180-count-input"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">{t("tournaments.legPerformance")}</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="current_match.best_leg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.bestLeg")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="9"
+                    step="1"
+                    placeholder="21"
+                    {...field}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 21)}
+                    data-testid="best-leg-input"
+                  />
+                </FormControl>
+                <FormDescription>{t("tournaments.minimumDarts")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="current_match.worst_leg"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("tournaments.worstLeg")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min="9"
+                    step="1"
+                    placeholder="33"
+                    {...field}
+                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 33)}
+                    data-testid="worst-leg-input"
+                  />
+                </FormControl>
+                <FormDescription>{t("tournaments.minimumDarts")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      {/* NEW: New Match Button */}
+      <div className="flex justify-end pt-4 border-t">
+        <Button type="button" variant="secondary" onClick={onSaveMatch} data-testid="new-match-button">
+          {t("tournaments.newMatch")}
+        </Button>
+      </div>
+    </div>
+  );
+}

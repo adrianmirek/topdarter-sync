@@ -1,0 +1,91 @@
+---
+import "../styles/global.css";
+import AuthNav from "@/components/navigation/AuthNav";
+import LayoutWrapper from "@/components/navigation/LayoutWrapper";
+import { detectLanguageFromHeader, type Language } from "@/lib/i18n";
+
+interface Props {
+  title?: string;
+  showAuthNav?: boolean;
+}
+
+const { title = "Darter Assistant", showAuthNav = true } = Astro.props;
+const user = Astro.locals.user;
+
+// Detect language from browser
+const acceptLanguage = Astro.request.headers.get("accept-language");
+const detectedLang = detectLanguageFromHeader(acceptLanguage);
+
+// Check if user has a stored language preference (client-side)
+// This will be handled by client-side script below
+---
+
+<!doctype html>
+<html lang={detectedLang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg" href="/favicon.png" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <!-- Language initialization script - set language based on stored preference or browser -->
+    <script is:inline define:vars={{ detectedLang }}>
+      // Get stored language preference or use detected language
+      const storedLang = localStorage.getItem("darter-language");
+      const currentLang = storedLang || detectedLang;
+      
+      // Store the language if not already stored
+      if (!storedLang) {
+        localStorage.setItem("darter-language", currentLang);
+      }
+      
+      // Set the lang attribute
+      document.documentElement.lang = currentLang;
+      
+      // Store in global scope for React components
+      window.__DARTER_LANG__ = currentLang;
+    </script>
+    <!-- Theme initialization script - prevents flash of wrong theme -->
+    <script is:inline>
+      document.documentElement.classList.add(localStorage.getItem("darter-theme") || "dark");
+    </script>
+    <!-- Sidebar state initialization - prevents flash on navigation -->
+    <script is:inline>
+      const sidebarExpanded = localStorage.getItem("darter-sidebar-expanded") === "true";
+      if (sidebarExpanded) {
+        document.documentElement.style.setProperty("--sidebar-initial-width", "16rem");
+        document.documentElement.style.setProperty("--sidebar-initial-opacity", "1");
+      } else {
+        document.documentElement.style.setProperty("--sidebar-initial-width", "0px");
+        document.documentElement.style.setProperty("--sidebar-initial-opacity", "0");
+      }
+    </script>
+  </head>
+  <body>
+    {showAuthNav && user && <AuthNav userEmail={user.email} lang={detectedLang} client:load />}
+    {
+      user ? (
+        <LayoutWrapper lang={detectedLang} client:load>
+          <slot />
+        </LayoutWrapper>
+      ) : (
+        <slot />
+      )
+    }
+  </body>
+</html>
+
+<style>
+  html {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+  }
+</style>
