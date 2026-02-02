@@ -1,6 +1,6 @@
 # Environment Variables Setup
 
-This document explains the environment variables needed for the Match Results Sync Scheduler.
+This document explains the environment variables needed for the schedulers (Match Results Sync and Tournament Keyword Sync).
 
 ## Required Environment Variables
 
@@ -107,6 +107,67 @@ RUN_ON_STARTUP=true
 
 ---
 
+### 5. TOURNAMENT_SYNC_KEYWORDS
+Keywords to search for when syncing tournaments (comma-separated for multiple keywords).
+
+**Default:** `agawa`
+
+**Examples:**
+```env
+# Single keyword
+TOURNAMENT_SYNC_KEYWORDS=agawa
+
+# Multiple keywords
+TOURNAMENT_SYNC_KEYWORDS=agawa,wroclaw,katowice
+```
+
+**When to use:**
+- To automatically discover and sync tournaments matching specific keywords
+- For tracking tournaments from specific locations or organizations
+
+---
+
+### 6. TOURNAMENT_SYNC_CRON_SCHEDULE
+Customize when the tournament keyword sync runs.
+
+**Default:** `* * * * *` (every minute - for testing)
+
+**Examples:**
+```env
+# Every minute (for testing)
+TOURNAMENT_SYNC_CRON_SCHEDULE=* * * * *
+
+# Every hour
+TOURNAMENT_SYNC_CRON_SCHEDULE=0 * * * *
+
+# Every 6 hours
+TOURNAMENT_SYNC_CRON_SCHEDULE=0 */6 * * *
+
+# Every day at 3 AM
+TOURNAMENT_SYNC_CRON_SCHEDULE=0 3 * * *
+
+# Every day at 9 AM and 9 PM
+TOURNAMENT_SYNC_CRON_SCHEDULE=0 9,21 * * *
+```
+
+**Recommended for production:** Every 6-24 hours (tournaments don't change frequently)
+
+**Cron Format:**
+```
+* * * * *
+│ │ │ │ │
+│ │ │ │ └─── Day of week (0-7, 0 or 7 is Sunday)
+│ │ │ └───── Month (1-12)
+│ │ └─────── Day of month (1-31)
+│ └───────── Hour (0-23)
+└─────────── Minute (0-59)
+```
+
+**Resources:**
+- [Crontab Guru](https://crontab.guru/) - Interactive cron expression editor
+
+---
+
 ## Complete .env Example
 
 Create or update your `.env` file with:
@@ -127,8 +188,14 @@ TOPDARTER_API_KEY=your-topdarter-api-key
 # ===================================
 # Scheduler Configuration (OPTIONAL)
 # ===================================
-# Cron schedule (default: every 10 minutes)
+# Match results sync - Cron schedule (default: every 10 minutes)
 MATCH_SYNC_CRON_SCHEDULE=*/10 * * * *
+
+# Tournament keyword sync - Cron schedule (default: every minute for testing)
+TOURNAMENT_SYNC_CRON_SCHEDULE=* * * * *
+
+# Keywords to search for tournaments (comma-separated)
+TOURNAMENT_SYNC_KEYWORDS=agawa
 
 # Run sync on startup (default: false)
 RUN_ON_STARTUP=false
@@ -148,6 +215,8 @@ import 'dotenv/config';
 console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? '✓ Set' : '✗ Missing');
 console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✓ Set' : '✗ Missing');
 console.log('MATCH_SYNC_CRON_SCHEDULE:', process.env.MATCH_SYNC_CRON_SCHEDULE || 'Using default (*/10 * * * *)');
+console.log('TOURNAMENT_SYNC_CRON_SCHEDULE:', process.env.TOURNAMENT_SYNC_CRON_SCHEDULE || 'Using default (* * * * *)');
+console.log('TOURNAMENT_SYNC_KEYWORDS:', process.env.TOURNAMENT_SYNC_KEYWORDS || 'agawa (default)');
 console.log('RUN_ON_STARTUP:', process.env.RUN_ON_STARTUP || 'false (default)');
 ```
 
@@ -163,6 +232,8 @@ Expected output:
 SUPABASE_URL: ✓ Set
 SUPABASE_SERVICE_ROLE_KEY: ✓ Set
 MATCH_SYNC_CRON_SCHEDULE: */10 * * * *
+TOURNAMENT_SYNC_CRON_SCHEDULE: * * * * *
+TOURNAMENT_SYNC_KEYWORDS: agawa
 RUN_ON_STARTUP: false
 ```
 
@@ -244,8 +315,11 @@ Project API keys
 **Quick test command:**
 
 ```bash
-# Set RUN_ON_STARTUP to test immediately
+# Test match results sync immediately
 RUN_ON_STARTUP=true npm run sync:match-results
+
+# Test tournament keyword sync immediately
+RUN_ON_STARTUP=true npm run sync:tournaments
 ```
 
 This will:

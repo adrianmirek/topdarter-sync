@@ -299,7 +299,7 @@ export async function syncTournamentsByKeyword(
         `Processing player results for ${uncompletedMatches.length} uncompleted matches (${matches.length - uncompletedMatches.length} already completed)...`
       );
 
-      try {
+      /*try {
         let anyMatchFailed = false;
         let allMatchesCompleted = true;
 
@@ -385,7 +385,7 @@ export async function syncTournamentsByKeyword(
         );
         // Individual match failures are already tracked in match_result_status
         // Tournament status will be auto-calculated by trigger based on match statuses
-      }
+      }*/
     } catch (error) {
       console.error(`Failed to import matches for ${tournament.nakka_identifier}:`, error);
 
