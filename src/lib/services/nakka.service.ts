@@ -232,7 +232,7 @@ export async function syncTournamentsByKeyword(
 
         // Scrape matches
         const scrapedMatches = await scrapeTournamentMatches(dbTournament.href);
-        const matchResult = await importMatches(supabase, dbTournament.tournament_id, scrapedMatches);
+        const matchResult = await importMatches(supabase, dbTournament.tournament_id, tournament.tournament_name, scrapedMatches);
 
         matchStats[tournament.nakka_identifier] = matchResult;
 
@@ -455,7 +455,14 @@ export async function scrapeTournamentMatches(tournamentHref: string): Promise<N
     }
 
     console.log(`Successfully scraped ${result.count} matches from external API`);
-    return result.data;
+
+    // Convert date strings back to Date objects
+    const matches = result.data.map((match: NakkaMatchScrapedDTO) => ({
+      ...match,
+      match_date: match.match_date ? new Date(match.match_date) : null,
+    }));
+
+    return matches;
   } catch (error) {
     console.error("Error calling scraper API for matches:", error);
     throw error;
@@ -472,6 +479,7 @@ export async function scrapeTournamentMatches(tournamentHref: string): Promise<N
 export async function importMatches(
   supabase: SupabaseClient,
   tournamentId: number,
+  tournamentName: string,
   matches: NakkaMatchScrapedDTO[]
 ): Promise<ImportMatchesResponseDTO> {
   const result: ImportMatchesResponseDTO = {
@@ -484,6 +492,10 @@ export async function importMatches(
 
   console.log(`Batch importing ${matches.length} matches for tournament ${tournamentId}...`);
 
+  for (const match of matches) {
+    match.match_type = extractMatchType(match.match_type, tournamentName);    
+  }
+
   // Prepare match records for batch upsert
   const matchRecords = matches.map((match) => ({
     tournament_id: tournamentId,
@@ -494,6 +506,7 @@ export async function importMatches(
     second_player_name: match.second_player_name,
     second_player_code: match.second_player_code,
     href: match.href,
+    match_date: match.match_date ? match.match_date.toISOString() : new Date().toISOString(),
   }));
 
   // Perform batch upsert using ignoreDuplicates
@@ -538,6 +551,23 @@ export async function importMatches(
   console.log(`Match import complete: ${result.inserted} inserted, ${result.skipped} skipped, ${result.failed} failed`);
   return result;
 }
+
+function extractMatchType(matchTitle: string, tournamentName: string): string {
+  if (!matchTitle) return "unknown";
+
+  let cleanedTitle = matchTitle;
+
+  if (cleanedTitle.startsWith(tournamentName)) {
+    cleanedTitle = cleanedTitle.substring(tournamentName.length).trim();
+  }
+
+  if (cleanedTitle.startsWith(" - ")) {
+    cleanedTitle = cleanedTitle.substring(3).trim();
+  }
+
+  return cleanedTitle;
+}
+
 
 /**
  * Scrapes player-level statistics from a match page using external Vercel scraper API

@@ -132,7 +132,7 @@ async function syncIncompleteMatchResults() {
 // Run every 10 minutes: */10 * * * *
 // For testing every minute: * * * * *
 // For testing every 5 minutes: */5 * * * *
-const CRON_SCHEDULE = process.env.MATCH_SYNC_CRON_SCHEDULE || '*/10 * * * *';
+const CRON_SCHEDULE = process.env.MATCH_SYNC_CRON_SCHEDULE || '*/3 * * * *';
 
 console.log('========================================');
 console.log('Match Results Sync Scheduler Started');

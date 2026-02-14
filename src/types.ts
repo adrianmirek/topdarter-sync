@@ -352,6 +352,7 @@ export interface NakkaMatchScrapedDTO {
   second_player_name: string;
   second_player_code: string; // e.g., "zJGq"
   href: string;
+  match_date?: Date | null; // Match date/time from scraper (optional)
 }
 
 /**
@@ -407,6 +408,7 @@ export interface NakkaTournamentMatchDTO {
   opponent_name: string;
   opponent_code: string;
   href: string;
+  match_date?: string; // Match date/time (optional, present when available from database or scraper)
   isChecked: boolean;
   // Player statistics (null if not yet scraped/imported)
   average_score?: number | null;
@@ -470,6 +472,7 @@ export interface NakkaPlayerMatchResult {
   nakka_match_identifier: string;
   match_type: string;
   match_href: string;
+  match_date: string;
 
   // Player-oriented match data (matched player is always "player")
   player_name: string;

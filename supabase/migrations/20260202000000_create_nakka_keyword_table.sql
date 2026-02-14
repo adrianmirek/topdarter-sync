@@ -7,6 +7,11 @@
 -- This migration creates a new table to track keywords and when they were
 -- last synchronized with external systems.
 
+-- Grant usage on nakka schema to necessary roles
+grant usage on schema nakka to service_role;
+grant usage on schema nakka to authenticated;
+grant usage on schema nakka to anon;
+
 -- Create the keyword table
 create table if not exists nakka.keyword (
   -- Primary identifier for the keyword
@@ -36,6 +41,15 @@ create index if not exists idx_nakka_keyword_keyword on nakka.keyword(keyword);
 
 -- Create index on last_sync_date for filtering by sync status
 create index if not exists idx_nakka_keyword_last_sync_date on nakka.keyword(last_sync_date);
+
+-- Grant table permissions to roles
+-- Service role gets full access (bypasses RLS anyway, but good practice)
+grant all on nakka.keyword to service_role;
+grant all on nakka.keyword to postgres;
+
+-- Authenticated and anon users get access (controlled by RLS policies)
+grant select, insert, update, delete on nakka.keyword to authenticated;
+grant select, insert, update, delete on nakka.keyword to anon;
 
 -- Enable Row Level Security (required for all tables)
 alter table nakka.keyword enable row level security;
@@ -114,6 +128,11 @@ begin
   return new;
 end;
 $$ language plpgsql;
+
+-- Grant execute permission on the function
+grant execute on function nakka.update_keyword_updated_at() to service_role;
+grant execute on function nakka.update_keyword_updated_at() to authenticated;
+grant execute on function nakka.update_keyword_updated_at() to anon;
 
 -- Create trigger to call the update function
 create trigger update_keyword_updated_at

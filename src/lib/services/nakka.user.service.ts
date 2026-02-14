@@ -403,6 +403,7 @@ async function upsertTournamentMatches(
       second_player_name: match.second_player_name,
       second_player_code: match.second_player_code,
       href: match.href,
+      match_date: match.match_date ? match.match_date.toISOString() : new Date().toISOString(),
     }));
 
     // Perform batch upsert using ignoreDuplicates
