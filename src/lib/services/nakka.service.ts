@@ -220,8 +220,8 @@ export async function syncTournamentsByKeyword(
       const matches = (existingMatches || []) as unknown as TournamentMatchWithStatus[];
 
       // If no matches exist, scrape them from Nakka first
-      if (matches.length === 0) {
-        console.log(`No matches found in database for ${tournament.nakka_identifier}, scraping from Nakka...`);
+      //if (matches.length === 0) {
+        //console.log(`No matches found in database for ${tournament.nakka_identifier}, scraping from Nakka...`);
 
         // Update status to in_progress
         await supabase
@@ -277,7 +277,7 @@ export async function syncTournamentsByKeyword(
 
         matches.length = 0;
         matches.push(...(newMatches as unknown as TournamentMatchWithStatus[]));
-      }
+      //}
 
       // Step 4: Process player results for uncompleted matches only
       // Filter out completed matches
