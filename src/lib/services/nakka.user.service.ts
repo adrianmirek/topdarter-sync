@@ -597,7 +597,23 @@ export async function scrapeAndImportMatchPlayerResults(
   try {
     console.log(`[Scrape & Import] Starting scrape for match: ${nakka_match_identifier}`);
 
-    // Step 1: Update match status to in_progress
+    // Step 1: Fetch match details to get player codes
+    const { data: matchData, error: fetchError } = await supabase
+      .schema("nakka")
+      .from("tournament_matches" as unknown as "tournament_matches")
+      .select("first_player_code, second_player_code")
+      .eq("tournament_match_id", tournament_match_id)
+      .single();
+
+    if (fetchError || !matchData) {
+      console.error(`[Scrape & Import] Failed to fetch match data:`, fetchError);
+      throw new Error(`Failed to fetch match data: ${fetchError?.message || "Match not found"}`);
+    }
+
+    const { first_player_code, second_player_code } = matchData;
+    console.log(`[Scrape & Import] Retrieved player codes: ${first_player_code}, ${second_player_code}`);
+
+    // Step 2: Update match status to in_progress
     const { error: statusUpdateError } = await supabase
       .schema("nakka")
       .from("tournament_matches" as unknown as "tournament_matches")
@@ -611,9 +627,14 @@ export async function scrapeAndImportMatchPlayerResults(
 
     console.log(`[Scrape & Import] Match status updated to in_progress`);
 
-    // Step 2: Scrape player results from match page
+    // Step 3: Scrape player results from match page
     console.log(`[Scrape & Import] Scraping player results from: ${match_href}`);
-    const playerResults = await scrapeMatchPlayerResults(match_href, nakka_match_identifier);
+    const playerResults = await scrapeMatchPlayerResults(
+      match_href,
+      nakka_match_identifier,
+      first_player_code,
+      second_player_code
+    );
     console.log(`[Scrape & Import] Successfully scraped ${playerResults.length} player results`);
 
     // Step 3: Import player results to database

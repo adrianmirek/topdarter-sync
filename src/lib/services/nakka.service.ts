@@ -577,7 +577,9 @@ function extractMatchType(matchTitle: string, tournamentName: string): string {
  */
 export async function scrapeMatchPlayerResults(
   matchHref: string,
-  nakkaMatchIdentifier: string
+  nakkaMatchIdentifier: string,
+  firstPlayerCode: string,
+  secondPlayerCode: string
 ): Promise<NakkaMatchPlayerResultScrapedDTO[]> {
   console.log(`Calling external scraper API for player results from: ${matchHref}`);
 
@@ -593,7 +595,7 @@ export async function scrapeMatchPlayerResults(
     const response = await fetch(`${TOPDARTER_API_URL}/api/scrape-player-results`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ matchHref, nakkaMatchIdentifier }),
+      body: JSON.stringify({ matchHref, nakkaMatchIdentifier, firstPlayerCode, secondPlayerCode }),
     });
 
     if (!response.ok) {
