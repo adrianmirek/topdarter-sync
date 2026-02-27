@@ -95,7 +95,7 @@ jobs:
           echo "lint_status=${LINT_STATUS}" >> $GITHUB_OUTPUT
           echo "unit_status=${UNIT_STATUS}" >> $GITHUB_OUTPUT
 
-          if [[ "${LINT_STATUS}" == "success" && "${UNIT_STATUS}" == "success"]]; then
+          if [[ "${LINT_STATUS}" == "success" && "${UNIT_STATUS}" == "success" ]]; then
             echo "all_passed=true" >> $GITHUB_OUTPUT
           else
             echo "all_passed=false" >> $GITHUB_OUTPUT
@@ -114,12 +114,6 @@ jobs:
             echo "unit=✅" >> $GITHUB_OUTPUT
           else
             echo "unit=❌" >> $GITHUB_OUTPUT
-          fi
-
-          if [[ "${{ steps.check.outputs.e2e_status }}" == "success" ]]; then
-            echo "e2e=✅" >> $GITHUB_OUTPUT
-          else
-            echo "e2e=❌" >> $GITHUB_OUTPUT
           fi
 
       - name: Comment PR - Success
