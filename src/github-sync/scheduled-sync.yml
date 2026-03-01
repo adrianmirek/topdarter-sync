@@ -1,0 +1,45 @@
+name: Scheduled Data Sync
+
+on:
+  schedule:
+    # Tournament sync - every 15 minutes
+    - cron: '*/15 * * * *'
+    # Match results sync - every 10 minutes  
+    - cron: '*/10 * * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine sync type based on schedule
+        id: sync-type
+        run: |
+          # Check current minute to determine which sync to run
+          MINUTE=$(date +%M)
+          if [ $((10#$MINUTE % 15)) -eq 0 ]; then
+            echo "type=tournament" >> $GITHUB_OUTPUT
+          elif [ $((10#$MINUTE % 10)) -eq 0 ]; then
+            echo "type=match-results" >> $GITHUB_OUTPUT
+          else
+            echo "type=both" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync Tournaments
+        if: steps.sync-type.outputs.type == 'tournament' || steps.sync-type.outputs.type == 'both'
+        run: |
+          curl -X POST "${{ secrets.APP_URL }}/api/sync/tournaments" \
+            -H "Authorization: Bearer ${{ secrets.SYNC_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --max-time 300 \
+            --fail-with-body
+
+      - name: Sync Match Results
+        if: steps.sync-type.outputs.type == 'match-results' || steps.sync-type.outputs.type == 'both'
+        run: |
+          curl -X POST "${{ secrets.APP_URL }}/api/sync/match-results" \
+            -H "Authorization: Bearer ${{ secrets.SYNC_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --max-time 300 \
+            --fail-with-body
