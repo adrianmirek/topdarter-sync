@@ -22,7 +22,8 @@
     "test:e2e:report": "playwright show-report",
     "dev:e2e": "astro dev --mode test",
     "sync:match-results": "tsx src/lib/scheduler/match-results-sync.ts",
-    "sync:tournaments": "tsx src/lib/scheduler/tournament-keyword-sync.ts"
+    "sync:tournaments": "tsx src/lib/scheduler/tournament-keyword-sync.ts",
+    "sync:leagues": "tsx src/lib/scheduler/league-tournament-keyword-sync.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "12.6.10",
