@@ -315,6 +315,31 @@ export interface NakkaTournamentScrapedDTO {
   href: string;
   tournament_date: Date;
   status: "completed" | "preparing" | "ongoing";
+  league_identifier?: string;
+  league_href?: string;
+  league_name?: string;
+}
+
+/**
+ * DTO for Nakka league scraped from HTML
+ */
+export interface NakkaLeagueScrapedDTO {
+  lgid: string;
+  league_name: string;
+  portal_href: string;
+  events: NakkaLeagueEventScrapedDTO[];
+}
+
+/**
+ * DTO for Nakka league event (tournament) scraped from HTML
+ */
+export interface NakkaLeagueEventScrapedDTO {
+  event_id: string;
+  event_name: string;
+  event_href: string;
+  league_id: string;
+  event_status: string;
+  event_date: Date;
 }
 
 /**
