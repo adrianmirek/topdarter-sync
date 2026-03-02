@@ -1,10 +1,10 @@
 // Load environment variables FIRST (before any other imports that might use them)
-import 'dotenv/config';
+import "dotenv/config";
 
-import cron from 'node-cron';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/db/database.types';
-import { syncLeagueTournamentsByKeyword } from '@/lib/services/nakka.service';
+import cron from "node-cron";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/db/database.types";
+import { syncLeagueTournamentsByKeyword } from "@/lib/services/nakka.service";
 
 // Type definition for keyword records from nakka.keyword table
 // Note: Run `npm run supabase:types` to regenerate types after migration
@@ -21,7 +21,7 @@ function createSchedulerSupabaseClient() {
   const supabaseServiceKey = process.env.SUPABASE_PUBLIC_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing required Supabase environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error("Missing required Supabase environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
 
   return createClient<Database>(supabaseUrl, supabaseServiceKey, {
@@ -46,18 +46,18 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
 
     // Step 1: Get keywords from nakka.keyword table where last_sync_date is older than 4 hours
     const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
-    
+
     console.log(`[${timestamp}] Fetching league keywords older than 4 hours (before ${fourHoursAgo})...`);
-    
+
     // Note: Using type assertion because nakka.keyword types may not be generated yet
     // Run `npm run supabase:types` to regenerate types after migration
     const { data: keywordRecords, error: fetchError } = (await (supabase as any)
-      .schema('nakka')
-      .from('keyword')
-      .select('id, keyword, last_sync_date, is_league')
-      .eq('is_league', true)
-      .lt('last_sync_date', fourHoursAgo)
-      .order('last_sync_date', { ascending: true })) as { data: KeywordRecord[] | null; error: any };
+      .schema("nakka")
+      .from("keyword")
+      .select("id, keyword, last_sync_date, is_league")
+      .eq("is_league", true)
+      .lt("last_sync_date", fourHoursAgo)
+      .order("last_sync_date", { ascending: true })) as { data: KeywordRecord[] | null; error: any };
 
     if (fetchError) {
       console.error(`[${timestamp}] Error fetching keywords from database:`, fetchError);
@@ -73,7 +73,7 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
     keywordRecords.forEach((record, idx) => {
       console.log(`[${timestamp}]   ${idx + 1}. "${record.keyword}" (last synced: ${record.last_sync_date})`);
     });
-    console.log('');
+    console.log("");
 
     // Step 2: Process each keyword
     let totalInserted = 0;
@@ -86,7 +86,7 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
     for (let i = 0; i < keywordRecords.length; i++) {
       const record = keywordRecords[i];
       const keyword = record.keyword;
-      
+
       try {
         console.log(`[${timestamp}] [${i + 1}/${keywordRecords.length}] Syncing league keyword: "${keyword}"`);
 
@@ -106,10 +106,10 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
         // Step 3: Update last_sync_date on successful sync
         const updateTimestamp = new Date().toISOString();
         const { error: updateError } = await (supabase as any)
-          .schema('nakka')
-          .from('keyword')
+          .schema("nakka")
+          .from("keyword")
           .update({ last_sync_date: updateTimestamp })
-          .eq('id', record.id);
+          .eq("id", record.id);
 
         if (updateError) {
           console.error(`[${timestamp}] ⚠ Warning: Failed to update last_sync_date for "${keyword}":`, updateError);
@@ -117,15 +117,15 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
           console.log(`[${timestamp}] ✓ Updated last_sync_date for "${keyword}" to ${updateTimestamp}`);
           successfulKeywords.push(keyword);
         }
-        console.log(''); // Empty line for readability
+        console.log(""); // Empty line for readability
       } catch (error) {
         failedKeywords.push(keyword);
         console.error(
           `[${timestamp}] ✗ Failed to sync league keyword "${keyword}":`,
-          error instanceof Error ? error.message : 'Unknown error'
+          error instanceof Error ? error.message : "Unknown error"
         );
         console.error(`[${timestamp}] Stack trace:`, error);
-        console.log(''); // Empty line for readability
+        console.log(""); // Empty line for readability
         // Continue with next keyword even if this one fails
       }
     }
@@ -142,10 +142,10 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
     console.log(`[${endTimestamp}] Total league tournaments skipped: ${totalSkipped}`);
     console.log(`[${endTimestamp}] Total league tournaments processed: ${totalProcessed}`);
     if (successfulKeywords.length > 0) {
-      console.log(`[${endTimestamp}] Successful keywords: ${successfulKeywords.join(', ')}`);
+      console.log(`[${endTimestamp}] Successful keywords: ${successfulKeywords.join(", ")}`);
     }
     if (failedKeywords.length > 0) {
-      console.log(`[${endTimestamp}] Failed keywords: ${failedKeywords.join(', ')}`);
+      console.log(`[${endTimestamp}] Failed keywords: ${failedKeywords.join(", ")}`);
     }
     console.log(`[${endTimestamp}] ========================================\n`);
   } catch (error) {
@@ -156,13 +156,13 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
 // Run every minute for testing: * * * * *
 // For production every hour: 0 * * * *
 // For production every 6 hours: 0 */6 * * *
-const CRON_SCHEDULE = process.env.LEAGUE_TOURNAMENT_SYNC_CRON_SCHEDULE || '*/15 * * * *';
+const CRON_SCHEDULE = process.env.LEAGUE_TOURNAMENT_SYNC_CRON_SCHEDULE || "*/15 * * * *";
 
-console.log('========================================');
-console.log('League Tournament Keyword Sync Scheduler Started');
+console.log("========================================");
+console.log("League Tournament Keyword Sync Scheduler Started");
 console.log(`Schedule: ${CRON_SCHEDULE}`);
-console.log('Keywords source: nakka.keyword table (is_league = true, syncs keywords older than 4 hours)');
-console.log('========================================\n');
+console.log("Keywords source: nakka.keyword table (is_league = true, syncs keywords older than 4 hours)");
+console.log("========================================\n");
 
 // Schedule the cron job
 cron.schedule(CRON_SCHEDULE, () => {
@@ -170,10 +170,10 @@ cron.schedule(CRON_SCHEDULE, () => {
 });
 
 // Optional: Run immediately on startup
-if (process.env.RUN_ON_STARTUP === 'true') {
-  console.log('RUN_ON_STARTUP is enabled. Running sync immediately...\n');
+if (process.env.RUN_ON_STARTUP === "true") {
+  console.log("RUN_ON_STARTUP is enabled. Running sync immediately...\n");
   syncLeagueTournamentsByConfiguredKeywords();
 }
 
 // Keep the process running
-console.log('Scheduler is running. Press Ctrl+C to stop.\n');
+console.log("Scheduler is running. Press Ctrl+C to stop.\n");

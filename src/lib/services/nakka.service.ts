@@ -13,9 +13,8 @@ import type {
 // Scraper API configuration
 const TOPDARTER_API_URL = TOPDARTER_API_BASE_URL || "https://localhost:3002";
 // Support both Astro (import.meta.env) and Node.js (process.env) environments
-const TOPDARTER_API_KEY = typeof import.meta?.env !== 'undefined' 
-  ? import.meta.env.TOPDARTER_API_KEY 
-  : process.env.TOPDARTER_API_KEY;
+const TOPDARTER_API_KEY =
+  typeof import.meta?.env !== "undefined" ? import.meta.env.TOPDARTER_API_KEY : process.env.TOPDARTER_API_KEY;
 
 /**
  * Scrapes tournaments from Nakka by keyword using external Vercel scraper API
@@ -108,22 +107,22 @@ export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Pr
 
     // Validate result.data exists
     if (!result.data || !result.data.leagues) {
-      console.warn('No league data returned from scraper API');
+      console.warn("No league data returned from scraper API");
       return [];
     }
 
     // Map leagues with events to tournament DTOs
     const tournaments: NakkaTournamentScrapedDTO[] = [];
-    
+
     // Access the leagues array from result.data.leagues
     const leagues = result.data.leagues as NakkaLeagueScrapedDTO[];
-    
+
     for (const league of leagues) {
       if (!league || !league.events) {
         console.warn(`Skipping invalid league data:`, league);
         continue;
       }
-      
+
       for (const event of league.events) {
         tournaments.push({
           nakka_identifier: event.event_id,
@@ -255,16 +254,19 @@ export async function importLeagueTournaments(
       });
     } else {
       // Insert new record with league information
-      const { error } = await supabase.schema("nakka").from("tournaments").insert({
-        nakka_identifier: tournament.nakka_identifier,
-        tournament_name: tournament.tournament_name,
-        tournament_date: tournament.tournament_date.toISOString(),
-        href: tournament.href,
-        match_import_status: null, // Will be set when match import starts
-        league_identifier: tournament.league_identifier || null,
-        league_href: tournament.league_href || null,
-        league_name: tournament.league_name || null,
-      });
+      const { error } = await supabase
+        .schema("nakka")
+        .from("tournaments")
+        .insert({
+          nakka_identifier: tournament.nakka_identifier,
+          tournament_name: tournament.tournament_name,
+          tournament_date: tournament.tournament_date.toISOString(),
+          href: tournament.href,
+          match_import_status: null, // Will be set when match import starts
+          league_identifier: tournament.league_identifier || null,
+          league_href: tournament.league_href || null,
+          league_name: tournament.league_name || null,
+        });
 
       if (error) {
         console.error("Failed to insert league tournament:", error);
@@ -374,62 +376,67 @@ export async function syncTournamentsByKeyword(
 
       // If no matches exist, scrape them from Nakka first
       //if (matches.length === 0) {
-        //console.log(`No matches found in database for ${tournament.nakka_identifier}, scraping from Nakka...`);
+      //console.log(`No matches found in database for ${tournament.nakka_identifier}, scraping from Nakka...`);
 
-        // Update status to in_progress
+      // Update status to in_progress
+      await supabase
+        .schema("nakka")
+        .from("tournaments")
+        .update({ match_import_status: "in_progress" })
+        .eq("tournament_id", dbTournament.tournament_id);
+
+      // Scrape matches
+      const scrapedMatches = await scrapeTournamentMatches(dbTournament.href);
+      const matchResult = await importMatches(
+        supabase,
+        dbTournament.tournament_id,
+        tournament.tournament_name,
+        scrapedMatches
+      );
+
+      matchStats[tournament.nakka_identifier] = matchResult;
+
+      // Check if match scraping/import failed completely
+      if (
+        matchResult.failed > 0 ||
+        matchResult.total_processed === 0 ||
+        (matchResult.inserted === 0 && matchResult.skipped === 0)
+      ) {
+        const errorMessage = matchResult.errors?.length
+          ? JSON.stringify(matchResult.errors)
+          : "Failed to scrape or import matches";
+
         await supabase
           .schema("nakka")
           .from("tournaments")
-          .update({ match_import_status: "in_progress" })
+          .update({
+            match_import_status: "failed",
+            match_import_error: errorMessage,
+          })
           .eq("tournament_id", dbTournament.tournament_id);
 
-        // Scrape matches
-        const scrapedMatches = await scrapeTournamentMatches(dbTournament.href);
-        const matchResult = await importMatches(supabase, dbTournament.tournament_id, tournament.tournament_name, scrapedMatches);
+        console.log(`Match import failed for ${tournament.nakka_identifier}: ${errorMessage}`);
+        continue; // Skip to next tournament
+      }
 
-        matchStats[tournament.nakka_identifier] = matchResult;
+      console.log(
+        `Scraped ${matchResult.total_processed} matches for ${tournament.nakka_identifier} (inserted: ${matchResult.inserted}, skipped: ${matchResult.skipped})`
+      );
 
-        // Check if match scraping/import failed completely
-        if (
-          matchResult.failed > 0 ||
-          matchResult.total_processed === 0 ||
-          (matchResult.inserted === 0 && matchResult.skipped === 0)
-        ) {
-          const errorMessage = matchResult.errors?.length
-            ? JSON.stringify(matchResult.errors)
-            : "Failed to scrape or import matches";
+      // Fetch the newly inserted matches
+      const { data: newMatches, error: newMatchError } = await supabase
+        .schema("nakka")
+        .from("tournament_matches" as unknown as "tournament_matches")
+        .select("tournament_match_id, nakka_match_identifier, href, match_result_status")
+        .eq("tournament_id", dbTournament.tournament_id);
 
-          await supabase
-            .schema("nakka")
-            .from("tournaments")
-            .update({
-              match_import_status: "failed",
-              match_import_error: errorMessage,
-            })
-            .eq("tournament_id", dbTournament.tournament_id);
+      if (newMatchError || !newMatches) {
+        console.error(`Failed to fetch newly inserted matches:`, newMatchError);
+        continue;
+      }
 
-          console.log(`Match import failed for ${tournament.nakka_identifier}: ${errorMessage}`);
-          continue; // Skip to next tournament
-        }
-
-        console.log(
-          `Scraped ${matchResult.total_processed} matches for ${tournament.nakka_identifier} (inserted: ${matchResult.inserted}, skipped: ${matchResult.skipped})`
-        );
-
-        // Fetch the newly inserted matches
-        const { data: newMatches, error: newMatchError } = await supabase
-          .schema("nakka")
-          .from("tournament_matches" as unknown as "tournament_matches")
-          .select("tournament_match_id, nakka_match_identifier, href, match_result_status")
-          .eq("tournament_id", dbTournament.tournament_id);
-
-        if (newMatchError || !newMatches) {
-          console.error(`Failed to fetch newly inserted matches:`, newMatchError);
-          continue;
-        }
-
-        matches.length = 0;
-        matches.push(...(newMatches as unknown as TournamentMatchWithStatus[]));
+      matches.length = 0;
+      matches.push(...(newMatches as unknown as TournamentMatchWithStatus[]));
       //}
 
       // Step 4: Process player results for uncompleted matches only
@@ -651,13 +658,18 @@ export async function syncLeagueTournamentsByKeyword(
 
       // Scrape matches
       const scrapedMatches = await scrapeTournamentMatches(dbTournament.href);
-      
+
       // Replace "tournament" with "league" in match hrefs for league tournaments
-      scrapedMatches.forEach(match => {
-        match.href = match.href.replace('/tournament/', '/league/');
+      scrapedMatches.forEach((match) => {
+        match.href = match.href.replace("/tournament/", "/league/");
       });
-      
-      const matchResult = await importMatches(supabase, dbTournament.tournament_id, tournament.tournament_name, scrapedMatches);
+
+      const matchResult = await importMatches(
+        supabase,
+        dbTournament.tournament_id,
+        tournament.tournament_name,
+        scrapedMatches
+      );
 
       matchStats[tournament.nakka_identifier] = matchResult;
 
@@ -794,7 +806,7 @@ export async function importMatches(
   console.log(`Batch importing ${matches.length} matches for tournament ${tournamentId}...`);
 
   for (const match of matches) {
-    match.match_type = extractMatchType(match.match_type, tournamentName);    
+    match.match_type = extractMatchType(match.match_type, tournamentName);
   }
 
   // Prepare match records for batch upsert
@@ -868,7 +880,6 @@ function extractMatchType(matchTitle: string, tournamentName: string): string {
 
   return cleanedTitle;
 }
-
 
 /**
  * Scrapes player-level statistics from a match page using external Vercel scraper API

@@ -1,10 +1,10 @@
 // Load environment variables FIRST (before any other imports that might use them)
-import 'dotenv/config';
+import "dotenv/config";
 
-import cron from 'node-cron';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/db/database.types';
-import { scrapeAndImportMatchPlayerResults } from '@/lib/services/nakka.user.service';
+import cron from "node-cron";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/db/database.types";
+import { scrapeAndImportMatchPlayerResults } from "@/lib/services/nakka.user.service";
 
 // Create a standalone Supabase client for the scheduler
 function createSchedulerSupabaseClient() {
@@ -12,7 +12,7 @@ function createSchedulerSupabaseClient() {
   const supabaseServiceKey = process.env.SUPABASE_PUBLIC_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing required Supabase environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error("Missing required Supabase environment variables: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
 
   return createClient<Database>(supabaseUrl, supabaseServiceKey, {
@@ -29,28 +29,30 @@ function createSchedulerSupabaseClient() {
  */
 async function getIncompleteMatches(supabase: ReturnType<typeof createSchedulerSupabaseClient>) {
   try {
-    console.log('[Scheduler] Fetching incomplete matches from database...');
+    console.log("[Scheduler] Fetching incomplete matches from database...");
 
     const { data, error } = await supabase
-      .schema('nakka')
-      .from('tournament_matches' as never)
-      .select(`
+      .schema("nakka")
+      .from("tournament_matches" as never)
+      .select(
+        `
         tournament_match_id, 
         nakka_match_identifier, 
         href,
         tournaments!inner(tournament_date)
-      `)
-      .or('match_result_status.is.null,match_result_status.neq.completed')
-      .order('tournaments(tournament_date)', { ascending: false } as never)
+      `
+      )
+      .or("match_result_status.is.null,match_result_status.neq.completed")
+      .order("tournaments(tournament_date)", { ascending: false } as never)
       .limit(30);
 
     if (error) {
-      console.error('[Scheduler] Error fetching incomplete matches:', error);
+      console.error("[Scheduler] Error fetching incomplete matches:", error);
       return [];
     }
 
     console.log(`[Scheduler] Found ${data?.length || 0} incomplete matches`);
-    
+
     // Map to extract only the fields we need (tournament data is only used for ordering)
     return (data || []).map((match: any) => ({
       tournament_match_id: match.tournament_match_id,
@@ -58,7 +60,7 @@ async function getIncompleteMatches(supabase: ReturnType<typeof createSchedulerS
       href: match.href,
     }));
   } catch (error) {
-    console.error('[Scheduler] Exception fetching incomplete matches:', error);
+    console.error("[Scheduler] Exception fetching incomplete matches:", error);
     return [];
   }
 }
@@ -108,10 +110,10 @@ async function syncIncompleteMatchResults() {
         failCount++;
         console.error(
           `[${timestamp}] ✗ Failed to process match ${match.nakka_match_identifier}:`,
-          error instanceof Error ? error.message : 'Unknown error'
+          error instanceof Error ? error.message : "Unknown error"
         );
         console.error(`[${timestamp}] Stack trace:`, error);
-        console.log(''); // Empty line for readability
+        console.log(""); // Empty line for readability
         // Continue with next match even if this one fails
       }
     }
@@ -132,12 +134,12 @@ async function syncIncompleteMatchResults() {
 // Run every 10 minutes: */10 * * * *
 // For testing every minute: * * * * *
 // For testing every 5 minutes: */5 * * * *
-const CRON_SCHEDULE = process.env.MATCH_SYNC_CRON_SCHEDULE || '*/3 * * * *';
+const CRON_SCHEDULE = process.env.MATCH_SYNC_CRON_SCHEDULE || "*/3 * * * *";
 
-console.log('========================================');
-console.log('Match Results Sync Scheduler Started');
+console.log("========================================");
+console.log("Match Results Sync Scheduler Started");
 console.log(`Schedule: ${CRON_SCHEDULE}`);
-console.log('========================================\n');
+console.log("========================================\n");
 
 // Schedule the cron job
 cron.schedule(CRON_SCHEDULE, () => {
@@ -145,11 +147,10 @@ cron.schedule(CRON_SCHEDULE, () => {
 });
 
 // Optional: Run immediately on startup
-if (process.env.RUN_ON_STARTUP === 'true') {
-  console.log('RUN_ON_STARTUP is enabled. Running sync immediately...\n');
+if (process.env.RUN_ON_STARTUP === "true") {
+  console.log("RUN_ON_STARTUP is enabled. Running sync immediately...\n");
   syncIncompleteMatchResults();
 }
 
 // Keep the process running
-console.log('Scheduler is running. Press Ctrl+C to stop.\n');
-
+console.log("Scheduler is running. Press Ctrl+C to stop.\n");

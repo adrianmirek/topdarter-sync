@@ -3,10 +3,10 @@
  * Triggers tournament keyword sync (called by scheduled jobs)
  */
 
-import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/db/database.types';
-import { syncTournamentsByKeyword } from '@/lib/services/nakka.service';
+import type { APIRoute } from "astro";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/db/database.types";
+import { syncTournamentsByKeyword } from "@/lib/services/nakka.service";
 
 export const POST: APIRoute = async ({ request }) => {
   const timestamp = new Date().toISOString();
@@ -14,30 +14,30 @@ export const POST: APIRoute = async ({ request }) => {
 
   try {
     // Authentication check
-    const authHeader = request.headers.get('Authorization');
+    const authHeader = request.headers.get("Authorization");
     const expectedKey = import.meta.env.SYNC_API_KEY || process.env.SYNC_API_KEY;
 
     if (!expectedKey) {
       console.error(`[${timestamp}] SYNC_API_KEY not configured`);
-      return new Response(
-        JSON.stringify({ error: 'Sync service not configured' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: "Sync service not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(
-        JSON.stringify({ error: 'Missing or invalid authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Missing or invalid authorization header" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const providedKey = authHeader.substring(7); // Remove 'Bearer '
     if (providedKey !== expectedKey) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid API key' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: "Invalid API key" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // Create Supabase client
@@ -46,14 +46,14 @@ export const POST: APIRoute = async ({ request }) => {
 
     if (!supabaseUrl || !supabaseKey) {
       console.error(`[${timestamp}] Supabase credentials not configured`);
-      return new Response(
-        JSON.stringify({ error: 'Database not configured' }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: "Database not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     // Get keywords from database (older than 4 hours)
@@ -61,26 +61,26 @@ export const POST: APIRoute = async ({ request }) => {
     console.log(`[${timestamp}] Fetching keywords older than 4 hours (before ${fourHoursAgo})...`);
 
     const { data: keywordRecords, error: fetchError } = await (supabase as any)
-      .schema('nakka')
-      .from('keyword')
-      .select('id, keyword, last_sync_date')
-      .lt('last_sync_date', fourHoursAgo)
-      .order('last_sync_date', { ascending: true });
+      .schema("nakka")
+      .from("keyword")
+      .select("id, keyword, last_sync_date")
+      .lt("last_sync_date", fourHoursAgo)
+      .order("last_sync_date", { ascending: true });
 
     if (fetchError) {
       console.error(`[${timestamp}] Error fetching keywords:`, fetchError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch keywords', details: fetchError }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: "Failed to fetch keywords", details: fetchError }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     if (!keywordRecords || keywordRecords.length === 0) {
       console.log(`[${timestamp}] No keywords need syncing`);
-      return new Response(
-        JSON.stringify({ message: 'No keywords to sync', synced: 0 }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ message: "No keywords to sync", synced: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     console.log(`[${timestamp}] Found ${keywordRecords.length} keyword(s) to sync`);
@@ -98,22 +98,22 @@ export const POST: APIRoute = async ({ request }) => {
         // Update last_sync_date
         const updateTimestamp = new Date().toISOString();
         const { error: updateError } = await (supabase as any)
-          .schema('nakka')
-          .from('keyword')
+          .schema("nakka")
+          .from("keyword")
           .update({ last_sync_date: updateTimestamp })
-          .eq('id', record.id);
+          .eq("id", record.id);
 
         if (updateError) {
           console.error(`[${timestamp}] Warning: Failed to update last_sync_date for "${record.keyword}"`);
         }
 
         successCount++;
-        results.push({ keyword: record.keyword, status: 'success', ...result });
+        results.push({ keyword: record.keyword, status: "success", ...result });
         console.log(`[${timestamp}] ✓ Synced: ${record.keyword}`);
       } catch (error) {
         failCount++;
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        results.push({ keyword: record.keyword, status: 'failed', error: errorMessage });
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        results.push({ keyword: record.keyword, status: "failed", error: errorMessage });
         console.error(`[${timestamp}] ✗ Failed: ${record.keyword}`, errorMessage);
       }
     }
@@ -123,23 +123,20 @@ export const POST: APIRoute = async ({ request }) => {
       keywords_found: keywordRecords.length,
       success: successCount,
       failed: failCount,
-      results
+      results,
     };
 
     console.log(`[${timestamp}] Tournament sync completed: ${successCount} success, ${failCount} failed`);
 
-    return new Response(
-      JSON.stringify(summary),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify(summary), { status: 200, headers: { "Content-Type": "application/json" } });
   } catch (error) {
     console.error(`[${timestamp}] Fatal error in tournament sync:`, error);
     return new Response(
       JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 };
