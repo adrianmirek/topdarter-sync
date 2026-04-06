@@ -23,7 +23,8 @@
     "dev:e2e": "astro dev --mode test",
     "sync:match-results": "tsx src/lib/scheduler/match-results-sync.ts",
     "sync:tournaments": "tsx src/lib/scheduler/tournament-keyword-sync.ts",
-    "sync:leagues": "tsx src/lib/scheduler/league-tournament-keyword-sync.ts"
+    "sync:leagues": "tsx src/lib/scheduler/league-tournament-keyword-sync.ts",
+    "sync:tournament-player-stats": "tsx src/lib/scheduler/tournament-player-stats-sync.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "12.6.10",
