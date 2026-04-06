@@ -156,7 +156,7 @@ async function syncTournamentsByConfiguredKeywords() {
 // Run every minute for testing: * * * * *
 // For production every hour: 0 * * * *
 // For production every 6 hours: 0 */6 * * *
-const CRON_SCHEDULE = process.env.TOURNAMENT_SYNC_CRON_SCHEDULE || '*/1 * * * *';
+const CRON_SCHEDULE = process.env.TOURNAMENT_SYNC_CRON_SCHEDULE || '*/15 * * * *';
 
 console.log('========================================');
 console.log('Tournament Keyword Sync Scheduler Started');
