@@ -542,3 +542,43 @@ export interface GetPlayerMatchesResponseDTO {
   matches: NakkaPlayerMatchResult[];
   total_count: number;
 }
+
+/**
+ * DTO for a single player's stats within a tournament returned by the scraper API
+ */
+export interface NakkaTournamentPlayerStatScrapedDTO {
+  player_id: string;
+  rank: number;
+  score_100_count: number;
+  score_140_count: number;
+  score_170_count: number;
+  score_180_count: number;
+  high_finish: number;
+  best_leg: number;
+  average_score: number | null;
+  first_nine_avg: number | null;
+  win_rate: number | null;
+  leg_rate: number | null;
+  legs_count: number;
+  matches_count: number;
+}
+
+/**
+ * Response payload from the /api/scrape-tournament-stats endpoint
+ */
+export interface ScrapeTournamentStatsResponseDTO {
+  tournament_id: string;
+  players_stats: NakkaTournamentPlayerStatScrapedDTO[];
+}
+
+/**
+ * Result of importing tournament player stats into the database
+ */
+export interface ImportTournamentPlayerStatsResponseDTO {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  total_processed: number;
+  errors?: { player_id: string; error: string }[];
+}

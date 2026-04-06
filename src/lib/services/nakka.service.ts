@@ -8,10 +8,12 @@ import type {
   NakkaMatchPlayerResultScrapedDTO,
   ImportPlayerResultsResponseDTO,
   NakkaLeagueScrapedDTO,
+  NakkaTournamentPlayerStatScrapedDTO,
+  ImportTournamentPlayerStatsResponseDTO,
 } from "@/types";
 
 // Scraper API configuration
-const TOPDARTER_API_URL = TOPDARTER_API_BASE_URL || "https://localhost:3002";
+const TOPDARTER_API_URL = TOPDARTER_API_BASE_URL || "https://localhost:3001";
 // Support both Astro (import.meta.env) and Node.js (process.env) environments
 const TOPDARTER_API_KEY =
   typeof import.meta?.env !== "undefined" ? import.meta.env.TOPDARTER_API_KEY : process.env.TOPDARTER_API_KEY;
@@ -927,6 +929,156 @@ export async function scrapeMatchPlayerResults(
     console.error("Error calling scraper API for player results:", error);
     throw error;
   }
+}
+
+/**
+ * Scrapes aggregated player statistics for a tournament from the Top Darter API
+ * @param league_nakka_identifier - Nakka tournament identifier (e.g. "t_3CaN_8156")
+ * @returns Array of scraped player stat DTOs
+ */
+export async function scrapeTournamentPlayersStatsByNakkaIdentifier(
+  league_nakka_identifier: string
+): Promise<NakkaTournamentPlayerStatScrapedDTO[]> {
+  console.log(`Calling Top Darter API for tournament player stats: "${league_nakka_identifier}"`);
+  console.log(`Scraper API URL: ${TOPDARTER_API_URL}/api/scrape-tournament-stats`);
+
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (TOPDARTER_API_KEY) {
+      headers["topdarter-api-key"] = TOPDARTER_API_KEY;
+    }
+
+    const response = await fetch(`${TOPDARTER_API_URL}/api/scrape-tournament-stats`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ tournamentId: league_nakka_identifier }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Scraper API failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || "Tournament player stats scraping failed");
+    }
+
+    const playersStats: NakkaTournamentPlayerStatScrapedDTO[] = result.data?.players_stats ?? [];
+    console.log(`Successfully scraped ${playersStats.length} player stats for tournament "${league_nakka_identifier}"`);
+
+    return playersStats;
+  } catch (error) {
+    console.error("Error calling scraper API for tournament player stats:", error);
+    throw error;
+  }
+}
+
+/**
+ * Persists scraped tournament player stats to nakka.tournament_player_stats (upsert)
+ * @param supabase - Supabase client instance
+ * @param tournamentId - Internal database tournament_id (integer PK)
+ * @param stats - Array of scraped player stat DTOs
+ * @returns Import statistics
+ */
+export async function importTournamentPlayerStats(
+  supabase: SupabaseClient,
+  tournamentId: number,
+  stats: NakkaTournamentPlayerStatScrapedDTO[]
+): Promise<ImportTournamentPlayerStatsResponseDTO> {
+  const result: ImportTournamentPlayerStatsResponseDTO = {
+    inserted: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    total_processed: stats.length,
+    errors: [],
+  };
+
+  if (stats.length === 0) {
+    console.log(`No player stats to import for tournament ${tournamentId}`);
+    return result;
+  }
+
+  const validStats = stats.filter((stat) => (stat.average_score ?? 0) !== 0 && (stat.first_nine_avg ?? 0) !== 0);
+  const skippedCount = stats.length - validStats.length;
+
+  if (skippedCount > 0) {
+    console.log(`Skipping ${skippedCount} player stat row(s) with average_score = 0 and first_nine_avg = 0 for tournament ${tournamentId}`);
+  }
+
+  result.skipped = skippedCount;
+  result.total_processed = validStats.length;
+
+  if (validStats.length === 0) {
+    console.log(`No valid player stats to import for tournament ${tournamentId} (all rows had zero averages)`);
+    return result;
+  }
+
+  console.log(`Importing ${validStats.length} player stats for tournament ${tournamentId}...`);
+
+  const records = validStats.map((stat) => ({
+    tournament_id: tournamentId,
+    player_id: stat.player_id,
+    rank: stat.rank,
+    score_100_count: stat.score_100_count,
+    score_140_count: stat.score_140_count,
+    score_170_count: stat.score_170_count,
+    score_180_count: stat.score_180_count,
+    high_finish: stat.high_finish,
+    best_leg: stat.best_leg,
+    average_score: stat.average_score ?? null,
+    first_nine_avg: stat.first_nine_avg ?? null,
+    win_rate: stat.win_rate ?? null,
+    leg_rate: stat.leg_rate ?? null,
+    legs_count: stat.legs_count,
+    matches_count: stat.matches_count,
+    last_updated: new Date().toISOString(),
+    import_error: null,
+  }));
+
+  // tournament_player_stats is not in generated types yet — run `npm run supabase:types` after migration.
+  // We intentionally avoid .select() after upsert here: the RETURNING clause is unreliable on
+  // schema-qualified tables when using the `as any` cast (the prefer=return=representation header
+  // may not propagate correctly). Instead we do a separate COUNT query after the upsert so that
+  // the row count always reflects what is actually in the database.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: upsertError } = await (supabase as any)
+    .schema("nakka")
+    .from("tournament_player_stats")
+    .upsert(records, {
+      onConflict: "tournament_id,player_id",
+      ignoreDuplicates: false,
+    });
+
+  if (upsertError) {
+    result.failed = stats.length;
+    result.errors?.push({ player_id: "batch_upsert", error: upsertError.message });
+    console.error(`Batch upsert failed for tournament ${tournamentId}:`, upsertError.message);
+    return result;
+  }
+
+  // Verify the rows are actually present in the DB after the upsert
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count, error: countError } = await (supabase as any)
+    .schema("nakka")
+    .from("tournament_player_stats")
+    .select("tournament_player_stat_id", { count: "exact", head: true })
+    .eq("tournament_id", tournamentId);
+
+  if (countError) {
+    console.warn(`Upsert appeared to succeed but COUNT verification failed for tournament ${tournamentId}: ${countError.message}`);
+    result.inserted = 0;
+  } else {
+    result.inserted = count ?? 0;
+    console.log(`Upsert verified: ${result.inserted} rows present in tournament_player_stats for tournament ${tournamentId}`);
+  }
+
+  return result;
 }
 
 /**
