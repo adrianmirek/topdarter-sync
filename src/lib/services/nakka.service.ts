@@ -166,13 +166,26 @@ export async function importTournaments(
   };
 
   for (const tournament of tournaments) {
-    // Check if exists
-    const { data: existing } = await supabase
+    // Check if exists by Nakka id, then by name + date (same event under a different id)
+    const { data: existingById } = await supabase
       .schema("nakka")
       .from("tournaments")
       .select("tournament_id")
       .eq("nakka_identifier", tournament.nakka_identifier)
       .single();
+
+    let existing = existingById;
+
+    if (!existing) {
+      const { data: byNameDate } = await supabase
+        .schema("nakka")
+        .from("tournaments")
+        .select("tournament_id")
+        .eq("tournament_name", tournament.tournament_name)
+        .eq("tournament_date", tournament.tournament_date.toISOString())
+        .limit(1);
+      existing = byNameDate?.[0] ?? null;
+    }
 
     if (existing) {
       // Tournament already exists - skip it
@@ -237,13 +250,26 @@ export async function importLeagueTournaments(
   };
 
   for (const tournament of tournaments) {
-    // Check if exists
-    const { data: existing } = await supabase
+    // Check if exists by Nakka id, then by name + date (same event under a different id)
+    const { data: existingById } = await supabase
       .schema("nakka")
       .from("tournaments")
       .select("tournament_id")
       .eq("nakka_identifier", tournament.nakka_identifier)
       .single();
+
+    let existing = existingById;
+
+    if (!existing) {
+      const { data: byNameDate } = await supabase
+        .schema("nakka")
+        .from("tournaments")
+        .select("tournament_id")
+        .eq("tournament_name", tournament.tournament_name)
+        .eq("tournament_date", tournament.tournament_date.toISOString())
+        .limit(1);
+      existing = byNameDate?.[0] ?? null;
+    }
 
     if (existing) {
       // Tournament already exists - skip it
