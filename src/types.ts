@@ -378,6 +378,7 @@ export interface NakkaMatchScrapedDTO {
   second_player_code: string; // e.g., "zJGq"
   href: string;
   match_date?: Date | null; // Match date/time from scraper (optional)
+  nakka_mid?: string | null; // Nakka platform match mid (e.g., "iFLeTEwI_1789162367448")
 }
 
 /**

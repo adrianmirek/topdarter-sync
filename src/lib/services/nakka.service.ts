@@ -797,10 +797,11 @@ export async function scrapeTournamentMatches(tournamentHref: string): Promise<N
 
     console.log(`Successfully scraped ${result.count} matches from external API`);
 
-    // Convert date strings back to Date objects
+    // Convert date strings back to Date objects and normalize optional mid
     const matches = result.data.map((match: NakkaMatchScrapedDTO) => ({
       ...match,
       match_date: match.match_date ? new Date(match.match_date) : null,
+      nakka_mid: match.nakka_mid?.trim() ? match.nakka_mid.trim() : null,
     }));
 
     return matches;
@@ -848,6 +849,7 @@ export async function importMatches(
     second_player_code: match.second_player_code,
     href: match.href,
     match_date: match.match_date ? match.match_date.toISOString() : new Date().toISOString(),
+    nakka_mid: match.nakka_mid?.trim() ? match.nakka_mid.trim() : null,
   }));
 
   // Perform batch upsert using ignoreDuplicates

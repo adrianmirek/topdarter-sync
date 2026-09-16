@@ -404,6 +404,7 @@ async function upsertTournamentMatches(
       second_player_code: match.second_player_code,
       href: match.href,
       match_date: match.match_date ? match.match_date.toISOString() : new Date().toISOString(),
+      nakka_mid: match.nakka_mid?.trim() ? match.nakka_mid.trim() : null,
     }));
 
     // Perform batch upsert using ignoreDuplicates
