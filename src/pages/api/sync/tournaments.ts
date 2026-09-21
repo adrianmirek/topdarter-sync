@@ -93,7 +93,7 @@ export const POST: APIRoute = async ({ request }) => {
     for (const record of keywordRecords) {
       try {
         console.log(`[${timestamp}] Syncing keyword: "${record.keyword}"`);
-        const result = await syncTournamentsByKeyword(supabase as never, record.keyword);
+        const result = await syncTournamentsByKeyword(supabase as never, record.keyword, record.last_sync_date);
 
         // Update last_sync_date
         const updateTimestamp = new Date().toISOString();

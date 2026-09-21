@@ -18,18 +18,20 @@ import type { SupabaseClient } from "@/db/supabase.client";
 /**
  * Retrieves tournaments and their matches filtered by keyword and player nickname
  * This function does not persist data to database - it only scrapes and filters
+ * @param supabase - Supabase client used to skip completed tournaments already in the database
  * @param tournament_keyword - Search keyword for tournaments (e.g., "agawa")
  * @param nick_name - Player nickname to filter matches (e.g., "Mirek")
  * @returns Object containing tournaments with matches, marking matches where player nickname is found
  */
 export async function retrieveTournamentsMatchesByKeywordAndNickName(
+  supabase: SupabaseClient,
   tournament_keyword: string,
   nick_name: string
 ): Promise<RetrieveTournamentsMatchesResponseDTO> {
   console.log(`Retrieving tournaments for keyword: "${tournament_keyword}", nickname: "${nick_name}"`);
 
   // Step 1: Scrape all tournaments matching the keyword
-  const scrapedTournaments = await scrapeTournamentsByKeyword(tournament_keyword);
+  const scrapedTournaments = await scrapeTournamentsByKeyword(supabase, tournament_keyword);
   console.log(`Found ${scrapedTournaments.length} tournaments`);
 
   const tournaments: NakkaTournamentWithMatchesDTO[] = [];
@@ -98,7 +100,7 @@ export async function retrieveTournamentsMatchesByKeywordAndNickNameForGuest(
   console.log(`[Guest] Retrieving tournaments for keyword: "${tournament_keyword}", nickname: "${nick_name}"`);
 
   // Step 1: Scrape all tournaments matching the keyword (using stealth plugin to bypass Cloudflare)
-  const scrapedTournaments = await scrapeTournamentsByKeyword(tournament_keyword);
+  const scrapedTournaments = await scrapeTournamentsByKeyword(supabase, tournament_keyword);
   console.log(`[Guest] Found ${scrapedTournaments.length} tournaments`);
 
   const allMatches: NakkaPlayerMatchResult[] = [];

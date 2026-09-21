@@ -90,7 +90,7 @@ async function syncLeagueTournamentsByConfiguredKeywords() {
       try {
         console.log(`[${timestamp}] [${i + 1}/${keywordRecords.length}] Syncing league keyword: "${keyword}"`);
 
-        const result = await syncLeagueTournamentsByKeyword(supabase as never, keyword);
+        const result = await syncLeagueTournamentsByKeyword(supabase as never, keyword, record.last_sync_date);
 
         totalInserted += result.inserted;
         totalUpdated += result.updated;

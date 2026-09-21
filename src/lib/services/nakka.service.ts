@@ -19,29 +19,254 @@ const TOPDARTER_API_URL_3002 = "http://localhost:3002";
 const TOPDARTER_API_KEY =
   typeof import.meta?.env !== "undefined" ? import.meta.env.TOPDARTER_API_KEY : process.env.TOPDARTER_API_KEY;
 
+type ListedNakkaTournament = {
+  nakka_identifier?: string;
+  tournament_name?: string;
+  href?: string;
+  league_identifier?: string;
+  league_href?: string;
+  league_name?: string;
+};
+
+type ExistingNakkaTournamentRow = {
+  nakka_identifier: string;
+  match_import_status: string | null;
+};
+
+function getScraperHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (TOPDARTER_API_KEY) {
+    headers["topdarter-api-key"] = TOPDARTER_API_KEY;
+  }
+
+  return headers;
+}
+
+function isCompletedTournament(status: string | null | undefined): boolean {
+  return status === "completed";
+}
+
 /**
- * Scrapes tournaments from Nakka by keyword using external Vercel scraper API
- * @param keyword - Search keyword (e.g., "agawa")
- * @returns Array of scraped tournament DTOs
+ * Looks up an existing tournament by nakka_identifier.
  */
-export async function scrapeTournamentsByKeyword(keyword: string): Promise<NakkaTournamentScrapedDTO[]> {
-  console.log(`Calling external scraper API for keyword: "${keyword}"`);
-  console.log(`Scraper API URL: ${TOPDARTER_API_URL_3002}/api/scrape-tournaments`);
+async function findExistingTournament(
+  supabase: SupabaseClient,
+  nakkaIdentifier: string
+): Promise<ExistingNakkaTournamentRow | null> {
+  const { data: existingById, error: byIdError } = await supabase
+    .schema("nakka")
+    .from("tournaments")
+    .select("nakka_identifier, match_import_status")
+    .eq("nakka_identifier", nakkaIdentifier)
+    .maybeSingle();
 
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+  if (byIdError) {
+    console.error(`Failed to look up tournament ${nakkaIdentifier}:`, byIdError);
+    return null;
+  }
 
-    // Add API key if configured
-    if (TOPDARTER_API_KEY) {
-      headers["topdarter-api-key"] = TOPDARTER_API_KEY;
+  return existingById;
+}
+
+/**
+ * Looks up a previously skipped tournament by nakka_identifier.
+ */
+async function findSkippedTournament(
+  supabase: SupabaseClient,
+  nakkaIdentifier: string
+): Promise<{ nakka_identifier: string } | null> {
+  const { data, error } = await supabase
+    .schema("nakka")
+    .from("skipped_tournaments")
+    .select("nakka_identifier")
+    .eq("nakka_identifier", nakkaIdentifier)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Failed to look up skipped tournament ${nakkaIdentifier}:`, error);
+    return null;
+  }
+
+  return data;
+}
+
+/**
+ * Persists a tournament that scrape-tournament rejected (not 501 or older than 6 months).
+ */
+async function insertSkippedTournament(
+  supabase: SupabaseClient,
+  listed: ListedNakkaTournament,
+  nakkaIdentifier: string
+): Promise<void> {
+  const tournamentName = listed.tournament_name || nakkaIdentifier;
+  const href = listed.href;
+
+  if (!href) {
+    console.warn(
+      `Cannot insert skipped tournament ${nakkaIdentifier}: missing href, skipped_tournaments row will not be created`
+    );
+    return;
+  }
+
+  const { error } = await supabase.schema("nakka").from("skipped_tournaments").insert({
+    nakka_identifier: nakkaIdentifier,
+    tournament_name: tournamentName,
+    href,
+    league_identifier: listed.league_identifier || null,
+    league_href: listed.league_href || null,
+  });
+
+  if (error) {
+    console.error(`Failed to insert skipped tournament ${nakkaIdentifier}:`, error);
+    return;
+  }
+
+  console.log(`Inserted skipped tournament ${nakkaIdentifier} into nakka.skipped_tournaments`);
+}
+
+/**
+ * Scrapes a single tournament by nakka_identifier.
+ * The scraper API returns the tournament only when it is a 501 event and not older than 6 months; otherwise null.
+ */
+async function scrapeTournamentByNakkaIdentifier(
+  nakkaIdentifier: string
+): Promise<NakkaTournamentScrapedDTO | null> {
+  console.log(`Calling scrape-tournament API for nakka_identifier: "${nakkaIdentifier}"`);
+  console.log(`Scraper API URL: ${TOPDARTER_API_URL_3002}/api/scrape-tournament`);
+
+  const response = await fetch(`${TOPDARTER_API_URL_3002}/api/scrape-tournament`, {
+    method: "POST",
+    headers: getScraperHeaders(),
+    body: JSON.stringify({ nakka_identifier: nakkaIdentifier }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Scraper API failed: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  console.log(`scrape-tournament responded ${response.status} for nakka_identifier: "${nakkaIdentifier}"`);
+
+  const result = await response.json();
+
+  if (result.data == null) {
+    console.log(`scrape-tournament returned null data for nakka_identifier: "${nakkaIdentifier}"`);
+    return null;
+  }
+
+  if (result.success === false) {
+    throw new Error(result.error || "Tournament scraping failed");
+  }
+
+  const tournament = result.data as NakkaTournamentScrapedDTO;
+
+  return {
+    ...tournament,
+    nakka_identifier: tournament.nakka_identifier || nakkaIdentifier,
+    tournament_date: new Date(tournament.tournament_date),
+  };
+}
+
+/**
+ * Filters listed tournaments and fetches details via scrape-tournament.
+ * Completed DB tournaments are skipped. scrape-tournament returns null when the event is not 501 or is older than 6 months.
+ */
+async function enrichTournamentsViaScrapeTournament(
+  supabase: SupabaseClient,
+  listedTournaments: ListedNakkaTournament[]
+): Promise<NakkaTournamentScrapedDTO[]> {
+  const tournaments: NakkaTournamentScrapedDTO[] = [];
+
+  for (const listed of listedTournaments) {
+    const nakkaIdentifier = listed.nakka_identifier;
+    if (!nakkaIdentifier) {
+      console.warn("Skipping tournament without nakka_identifier, scrape-tournament will not be called:", listed);
+      continue;
     }
 
+    const existing = await findExistingTournament(supabase, nakkaIdentifier);
+    if (existing && isCompletedTournament(existing.match_import_status)) {
+      console.log(`Skipping ${nakkaIdentifier}: already completed in DB, scrape-tournament will not be called`);
+      continue;
+    }
+
+    const skipped = await findSkippedTournament(supabase, nakkaIdentifier);
+    if (skipped) {
+      console.log(
+        `Skipping ${nakkaIdentifier}: already in nakka.skipped_tournaments, scrape-tournament will not be called`
+      );
+      continue;
+    }
+
+    try {
+      console.log(`Calling scrape-tournament for nakka_identifier: "${nakkaIdentifier}"`);
+      const detailedTournament = await scrapeTournamentByNakkaIdentifier(nakkaIdentifier);
+
+      if (!detailedTournament) {
+        console.log(
+          `Skipping ${nakkaIdentifier}: scrape-tournament returned null (not 501 or older than 6 months)`
+        );
+        await insertSkippedTournament(supabase, listed, nakkaIdentifier);
+        continue;
+      }
+
+      if (listed.tournament_name) {
+        detailedTournament.tournament_name = listed.tournament_name;
+      }
+
+      if (listed.league_identifier) {
+        detailedTournament.league_identifier = listed.league_identifier;
+      }
+      if (listed.league_href) {
+        detailedTournament.league_href = listed.league_href;
+      }
+      if (listed.league_name) {
+        detailedTournament.league_name = listed.league_name;
+      }
+
+      console.log(
+        `scrape-tournament returned tournament for nakka_identifier: "${nakkaIdentifier}" (${detailedTournament.tournament_name})`
+      );
+      tournaments.push(detailedTournament);
+    } catch (error) {
+      console.error(`Failed to call scrape-tournament for nakka_identifier "${nakkaIdentifier}":`, error);
+    }
+  }
+
+  return tournaments;
+}
+
+/**
+ * Scrapes tournaments from Nakka by keyword using external scraper API.
+ * The list endpoint returns tournaments for the keyword; each item is then filtered:
+ * completed DB tournaments are skipped, others are fetched via /api/scrape-tournament.
+ * @param supabase - Supabase client used to check existing tournaments
+ * @param keyword - Search keyword (e.g., "agawa")
+ * @param keywordLastSyncDate - Keyword last_sync_date forwarded to the scraper as keyword_last_sync_date
+ * @returns Array of scraped tournament DTOs that still need processing
+ */
+export async function scrapeTournamentsByKeyword(
+  supabase: SupabaseClient,
+  keyword: string,
+  keywordLastSyncDate?: string
+): Promise<NakkaTournamentScrapedDTO[]> {
+  console.log(`Calling external scraper API for keyword: "${keyword}"`);
+  console.log(`Scraper API URL: ${TOPDARTER_API_URL_3002}/api/scrape-tournaments`);
+  if (keywordLastSyncDate) {
+    console.log(`Keyword last sync date: ${keywordLastSyncDate}`);
+  }
+
+  try {
     const response = await fetch(`${TOPDARTER_API_URL_3002}/api/scrape-tournaments`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ keyword }),
+      headers: getScraperHeaders(),
+      body: JSON.stringify({
+        keyword,
+        ...(keywordLastSyncDate ? { keyword_last_sync_date: keywordLastSyncDate } : {}),
+      }),
     });
 
     if (!response.ok) {
@@ -55,15 +280,14 @@ export async function scrapeTournamentsByKeyword(keyword: string): Promise<Nakka
       throw new Error(result.error || "Scraping failed");
     }
 
-    console.log(`Successfully scraped ${result.count} tournaments from external API`);
+    const listedTournaments = (result.data ?? []) as ListedNakkaTournament[];
+    console.log(`Successfully scraped ${listedTournaments.length} tournaments from external API`);
 
-    //TODO: Check if tournaments are already in the database by nakka_identifier, tournament_name and tournament_date
+    const tournaments = await enrichTournamentsViaScrapeTournament(supabase, listedTournaments);
 
-    // Convert date strings back to Date objects
-    const tournaments = result.data.map((tournament: NakkaTournamentScrapedDTO) => ({
-      ...tournament,
-      tournament_date: new Date(tournament.tournament_date),
-    }));
+    console.log(
+      `Keyword "${keyword}": ${tournaments.length}/${listedTournaments.length} tournaments eligible after DB and scrape-tournament filters`
+    );
 
     return tournaments;
   } catch (error) {
@@ -73,13 +297,23 @@ export async function scrapeTournamentsByKeyword(keyword: string): Promise<Nakka
 }
 
 /**
- * Scrapes leagues with tournaments from Nakka by keyword using external Vercel scraper API
+ * Scrapes leagues with tournaments from Nakka by keyword using external Vercel scraper API.
+ * Each league event is then filtered the same way as standalone tournaments via scrape-tournament.
+ * @param supabase - Supabase client used to check existing tournaments
  * @param keyword - Search keyword (e.g., "agawa grand prix")
+ * @param keywordLastSyncDate - Keyword last_sync_date forwarded to the scraper as keyword_last_sync_date
  * @returns Array of scraped tournament DTOs with league information
  */
-export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Promise<NakkaTournamentScrapedDTO[]> {
+export async function scrapeLeaguesWithTournamentsByKeyword(
+  supabase: SupabaseClient,
+  keyword: string,
+  keywordLastSyncDate?: string
+): Promise<NakkaTournamentScrapedDTO[]> {
   console.log(`Calling external scraper API for leagues with keyword: "${keyword}"`);
-  console.log(`Scraper API URL: ${TOPDARTER_API_URL}/api/scrape-leagues`);
+  console.log(`Scraper API URL: ${TOPDARTER_API_URL_3002}/api/scrape-leagues`);
+  if (keywordLastSyncDate) {
+    console.log(`Keyword last sync date: ${keywordLastSyncDate}`);
+  }
 
   try {
     const headers: Record<string, string> = {
@@ -94,7 +328,10 @@ export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Pr
     const response = await fetch(`${TOPDARTER_API_URL_3002}/api/scrape-leagues`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ keyword }),
+      body: JSON.stringify({
+        keyword,
+        ...(keywordLastSyncDate ? { keyword_last_sync_date: keywordLastSyncDate } : {}),
+      }),
     });
 
     if (!response.ok) {
@@ -116,10 +353,7 @@ export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Pr
       return [];
     }
 
-    // Map leagues with events to tournament DTOs
-    const tournaments: NakkaTournamentScrapedDTO[] = [];
-
-    // Access the leagues array from result.data.leagues
+    const listedTournaments: ListedNakkaTournament[] = [];
     const leagues = result.data.leagues as NakkaLeagueScrapedDTO[];
 
     for (const league of leagues) {
@@ -129,12 +363,10 @@ export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Pr
       }
 
       for (const event of league.events) {
-        tournaments.push({
+        listedTournaments.push({
           nakka_identifier: event.event_id,
           tournament_name: event.event_name,
           href: event.event_href,
-          tournament_date: new Date(event.event_date),
-          status: event.event_status as "completed" | "preparing" | "ongoing",
           league_identifier: league.lgid,
           league_href: league.portal_href,
           league_name: league.league_name,
@@ -142,7 +374,14 @@ export async function scrapeLeaguesWithTournamentsByKeyword(keyword: string): Pr
       }
     }
 
-    console.log(`Mapped ${tournaments.length} tournaments from leagues`);
+    console.log(`Mapped ${listedTournaments.length} tournaments from leagues`);
+
+    const tournaments = await enrichTournamentsViaScrapeTournament(supabase, listedTournaments);
+
+    console.log(
+      `League keyword "${keyword}": ${tournaments.length}/${listedTournaments.length} tournaments eligible after DB and scrape-tournament filters`
+    );
+
     return tournaments;
   } catch (error) {
     console.error("Error calling scraper API for leagues:", error);
@@ -327,14 +566,16 @@ export async function importLeagueTournaments(
  * Main orchestration function
  * @param supabase - Supabase client instance
  * @param keyword - Search keyword
+ * @param keywordLastSyncDate - Keyword last_sync_date forwarded to the scraper
  * @returns Import statistics
  */
 export async function syncTournamentsByKeyword(
   supabase: SupabaseClient,
-  keyword: string
+  keyword: string,
+  keywordLastSyncDate?: string
 ): Promise<ImportNakkaTournamentsResponseDTO> {
   // Step 1: Scrape tournaments
-  const scraped = await scrapeTournamentsByKeyword(keyword);
+  const scraped = await scrapeTournamentsByKeyword(supabase, keyword, keywordLastSyncDate);
 
   // Step 2: Import to database
   const result = await importTournaments(supabase, scraped);
@@ -381,7 +622,7 @@ export async function syncTournamentsByKeyword(
       }
 
       console.log(
-        `Processing tournament: ${tournament.nakka_identifier} (status: ${dbTournament.match_import_status || "null"})`
+        `Processing tournament: ${tournament.nakka_identifier} (status: ${dbTournament.match_import_status || "not in db"})`
       );
 
       // Check if matches already exist for this tournament
@@ -615,14 +856,16 @@ export async function syncTournamentsByKeyword(
  * Main orchestration function for league tournaments
  * @param supabase - Supabase client instance
  * @param keyword - Search keyword for leagues
+ * @param keywordLastSyncDate - Keyword last_sync_date forwarded to the scraper
  * @returns Import statistics
  */
 export async function syncLeagueTournamentsByKeyword(
   supabase: SupabaseClient,
-  keyword: string
+  keyword: string,
+  keywordLastSyncDate?: string
 ): Promise<ImportNakkaTournamentsResponseDTO> {
   // Step 1: Scrape leagues with tournaments
-  const scraped = await scrapeLeaguesWithTournamentsByKeyword(keyword);
+  const scraped = await scrapeLeaguesWithTournamentsByKeyword(supabase, keyword, keywordLastSyncDate);
 
   // Step 2: Import to database with league information
   const result = await importLeagueTournaments(supabase, scraped);
@@ -971,7 +1214,7 @@ export async function scrapeTournamentPlayersStatsByNakkaIdentifier(
   league_nakka_identifier: string
 ): Promise<NakkaTournamentPlayerStatScrapedDTO[]> {
   console.log(`Calling Top Darter API for tournament player stats: "${league_nakka_identifier}"`);
-  console.log(`Scraper API URL: ${TOPDARTER_API_URL}/api/scrape-tournament-stats`);
+  console.log(`Scraper API URL: ${TOPDARTER_API_URL_3002}/api/scrape-tournament-stats`);
 
   try {
     const headers: Record<string, string> = {
@@ -982,7 +1225,7 @@ export async function scrapeTournamentPlayersStatsByNakkaIdentifier(
       headers["topdarter-api-key"] = TOPDARTER_API_KEY;
     }
 
-    const response = await fetch(`${TOPDARTER_API_URL}/api/scrape-tournament-stats`, {
+    const response = await fetch(`${TOPDARTER_API_URL_3002}/api/scrape-tournament-stats`, {
       method: "POST",
       headers,
       body: JSON.stringify({ tournamentId: league_nakka_identifier }),

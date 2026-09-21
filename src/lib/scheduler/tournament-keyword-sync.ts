@@ -90,7 +90,7 @@ async function syncTournamentsByConfiguredKeywords() {
       try {
         console.log(`[${timestamp}] [${i + 1}/${keywordRecords.length}] Syncing keyword: "${keyword}"`);
 
-        const result = await syncTournamentsByKeyword(supabase as never, keyword);
+        const result = await syncTournamentsByKeyword(supabase as never, keyword, record.last_sync_date);
 
         totalInserted += result.inserted;
         totalUpdated += result.updated;
@@ -156,7 +156,7 @@ async function syncTournamentsByConfiguredKeywords() {
 // Run every minute for testing: * * * * *
 // For production every hour: 0 * * * *
 // For production every 6 hours: 0 */6 * * *
-const CRON_SCHEDULE = process.env.TOURNAMENT_SYNC_CRON_SCHEDULE || '*/15 * * * *';
+const CRON_SCHEDULE = process.env.TOURNAMENT_SYNC_CRON_SCHEDULE || '*/10 * * * *';
 
 console.log('========================================');
 console.log('Tournament Keyword Sync Scheduler Started');

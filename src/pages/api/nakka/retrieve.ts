@@ -54,7 +54,7 @@ export const POST: APIRoute = async ({ locals, request }) => {
     const { keyword, nick_name } = validation.data;
 
     // Execute retrieval
-    const result = await retrieveTournamentsMatchesByKeywordAndNickName(keyword, nick_name);
+    const result = await retrieveTournamentsMatchesByKeywordAndNickName(locals.supabase, keyword, nick_name);
 
     return new Response(JSON.stringify({ success: true, data: result }), {
       status: 200,
